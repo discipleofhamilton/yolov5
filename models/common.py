@@ -343,6 +343,68 @@ class SE(nn.Module):
 Squeeze and Excitation attention module
 '''
 
+'''
+Coordinate Attention module
+'''
+class h_sigmoid(nn.Module):
+    def __init__(self, inplace=True):
+        super(h_sigmoid, self).__init__()
+        self.relu = nn.ReLU6(inplace=inplace)
+
+    def forward(self, x):
+        return self.relu(x + 3) / 6
+
+class h_swish(nn.Module):
+    def __init__(self, inplace=True):
+        super(h_swish, self).__init__()
+        self.sigmoid = h_sigmoid(inplace=inplace)
+
+    def forward(self, x):
+        return x * self.sigmoid(x)
+    
+class CA(nn.Module):
+
+    def __init__(self, in_ch, reduction=32) -> None:
+        super(CA, self).__init__()
+
+        self.pool_h = nn.AdaptiveAvgPool2d((None, 1)) # y
+        self.pool_w = nn.AdaptiveAvgPool2d((1, None)) # x
+
+        middle_inpch = max(8, in_ch // reduction)
+
+        # concat
+        self.conv = nn.Conv2d(in_channels=in_ch, out_channels=middle_inpch, kernel_size=1, stride=1, padding=0)
+
+        self.bn = nn.BatchNorm2d(num_features=middle_inpch)
+        self.act = h_swish()
+
+        self.conv_h = nn.Conv2d(in_channels=middle_inpch, out_channels=in_ch, kernel_size=1, stride=1, padding=0) # y
+        self.conv_w = nn.Conv2d(in_channels=middle_inpch, out_channels=in_ch, kernel_size=1, stride=1, padding=0) # x
+
+    def forward(self, x):
+
+        identity = x
+
+        b, c, h, w = x.size()
+        
+        y_feature = self.pool_h(x)
+        x_feature = self.pool_w(x).permute(0, 1, 3, 2)
+
+        feature = torch.concat([y_feature, x_feature], dim=2)
+        feature = self.conv(feature)
+
+        feature = self.bn(feature)
+        feature = self.act(feature)
+
+        y_attention, x_attention = torch.split(feature, [h, w], dim=2)
+
+        y_attention = self.conv_h(y_attention).sigmoid()
+        x_attention = self.conv_w(x_attention).sigmoid()
+
+        return identity * y_attention * x_attention
+'''
+Coordinate Attention module
+'''
 
 class DetectMultiBackend(nn.Module):
     # YOLOv5 MultiBackend class for python inference on various backends
