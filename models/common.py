@@ -310,6 +310,38 @@ class Concat(nn.Module):
 
     def forward(self, x):
         return torch.cat(x, self.d)
+    
+
+'''
+Squeeze and Excitation attention module
+'''
+class SE(nn.Module):
+
+    def __init__(self, in_c, reduction=16, **kwargs) -> None:
+        super(SE).__init__(**kwargs)
+        
+        self.pooling = nn.AdaptiveAvgPool2d(output_size=(1, 1, in_c))
+        self.fc1  = nn.Linear(in_features=in_c, out_features=in_c//reduction, bias=False)
+        self.act1 = nn.ReLU(inplace=True)
+        self.fc2  = nn.Linear(in_features=in_c//reduction, out_features=in_c, bias=False)
+        self.act2 = nn.Sigmoid()
+
+    def forward(self, x):
+
+        b, c, _, _ = x.size()
+
+        att = self.pooling(x).view(b,c)
+        att = self.fc1(att)
+        att = self.act1(att)
+
+        att = self.fc2(att)
+        att = self.act2(att).view(b,c,1,1)
+
+        return x * att.expand_as(x)
+
+'''
+Squeeze and Excitation attention module
+'''
 
 
 class DetectMultiBackend(nn.Module):
